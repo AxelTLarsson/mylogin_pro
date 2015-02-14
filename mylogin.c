@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "pwdblib.h"   /* include header declarations for pwdblib.c */
+
 // so that I can use getpass()
 #include <pwd.h>
 #include <unistd.h>
@@ -57,31 +58,79 @@ int main(int argc, char **argv)
   char username[USERNAME_SIZE];
   read_username(username);
 
-  /* Write "Password: " and read user password without echoing it. */
-  char password[PASSWORD_SIZE]; // char array (string) with room for the password
-  char *pw[PASSWORD_SIZE]; // pointers to the chars
-  pw[0] = getpass("Password: "); // read the password safely
+  /* Write "Password: " and read user password input without echoing it. */
+  char *entered_pw[PASSWORD_SIZE];
+  *(entered_pw) = getpass("Password: "); // read the password safely
 
-  printf("\nThe password typed was: \"%s\"\n", *pw);
+  printf("\nThe password typed was: \"%s\"\n", *entered_pw);
 
   /*
-   * Check password
+   * Check username and password
    */
   struct pwdb_passwd *pwentry = pwdb_getpwnam(username);
 
   if (pwentry != NULL)
   {
+
+    // Retrieve the salt (by copying so that we do not lose information)
+    // Test copying strings
+    char *source[128], buf[128];
+    *(source) = "hejsan svejsan";
+    strlcpy(buf, source[0], sizeof(buf));
+    printf("source: %s\n", *source);
+    printf("buf: %s\n", buf);
+
+    source[0] = "Bajs";
+    printf("source: %s\n", *source);
+    printf("buf: %s\n", buf);
+
+    char salt[3];
+    strlcpy(salt, pwentry->pw_passwd, 3);
+    printf("salt: %s\n", salt);
+
+
+    // Hash entered password (overwrite memory where entered password resides with the hash instead)
+
+    // Compare
+
+    // Print some info
     printf("pwentry->pw_uid: %d\n", pwentry->pw_uid);
     printf("pwentry->pw_passwd: %s\n", pwentry->pw_passwd);
-    // hash the password
+
+
+    char *stored_hash[PASSWORD_SIZE];
+    *(stored_hash) = pwentry->pw_passwd;
+    printf("TEST: %s\n", *stored_hash);
+
+/*
+    // Save the stored hashed password for later comparison
+    char h[PASSWORD_SIZE];
+    char *hashed_passwd[PASSWORD_SIZE];
+    *hashed_passwd[0] = pwentry->pw_passwd;
+    printf("hashed_passwd: %s\n", hashed_passwd); 
+  
+
+    
+    // Get the salt
+    char salt[2];
+    char *psalt;
+    psalt = pwentry->pw_passwd;
+    psalt[2] = '\0';
+    printf("salt %s\n", psalt);
+
+    // hash the entered password
     char hash[PASSWORD_SIZE];
     char *phash[PASSWORD_SIZE];
-    phash[0] = crypt(password, "salt");
+    phash[0] = crypt(*pw, psalt);
 
     printf("hash: %s\n", *phash);
-    int result;
-    //int *presult = strcmp(hash, pwentry->pw_passwd);
-    //printf("result: %i\n", *presult);
+    
+    
+    printf("comparing '%s' with '%s'\n", *phash, *hashed_passwd);
+    int result = strcmp(*phash, psalt);
+    printf("result: %i\n", result);
+
+    */
 
   } else
   {
