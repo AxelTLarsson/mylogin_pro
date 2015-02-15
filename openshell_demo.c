@@ -3,7 +3,7 @@
  * 
  * Synopsis:
  *
- * Creates a new child process which starts a xterm window.
+ * Creates a new child process which starts an xterm window.
  * The parent just waits for the child to complete, and then exits.
  *
  */

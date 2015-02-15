@@ -51,10 +51,31 @@ void read_username(char *username)
   username[strlen(username) - 1] = '\0';
 }
 
-
+/* Signal handler */
+void sig_handler(int signo)
+{
+  if (signo == SIGINT)
+  {
+    printf("CTRL+C received.\n");
+  }
+  if (signo == SIGQUIT)
+  {
+    printf("SIGQUIT received.\n");
+  }
+  if (signo == SIGHUP)
+  {
+    printf("SIGHUP received.\n");
+  }
+}
 
 int main(int argc, char **argv)
 {
+
+  // Tell kernel that the function sig_handler should handle signals
+  signal(SIGINT, sig_handler);
+  signal(SIGQUIT, sig_handler);
+  signal(SIGHUP, sig_handler);
+
   while (1)
   {
     /* 
