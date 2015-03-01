@@ -76,7 +76,7 @@ int main(int argc, char **argv)
 
       // Retrieve the salt (by copying so that we do not lose information)
       char salt[3];
-      strlcpy(salt, pwentry->pw_passwd, 3);
+      strncpy(salt, pwentry->pw_passwd, 3);
       // printf("salt: %s\n", salt);
 
       // Hash entered password

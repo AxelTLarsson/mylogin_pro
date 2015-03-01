@@ -21,7 +21,10 @@
 #define PASSWORD_LEN (128) // maximum allowed password length according to passwd
 #define PW_AGE_MAX (10) // password age defined as number of successful logins before reminding user to change password
 #define MAX_PW_TRIES (5) // max number of allowed tries before account is locked
-
+#include <signal.h>
+#include <wait.h>  // get rid of "warning: implicit declaration of function ‘waitpid’"
+#include <errno.h> // get some sweet errors
+#include <grp.h>  // allows us to change supplementary groups
 
 int print_info(const char *username)
 {
@@ -68,13 +71,85 @@ void sig_handler(int signo)
   }
 }
 
+/* Start shell for user after successful authentication */
+int open_shell(char * user, char *pref_shell, uid_t uid, gid_t gid)
+{
+  #define PROGRAM "/usr/bin/xterm"
+
+  pid_t pid; 
+  int status;
+
+  pid = fork();
+
+  if (pid==0) {
+    /* Set righ real and effective user and group */  
+    
+    // Set GID
+    setgid(gid);
+    switch(errno)
+    {
+     case EINVAL:
+      printf("EINVAL: The value of the new euid argument is invalid.\n");
+      break;
+    case EPERM:
+      printf("EPERM: The process may not change to the specified GID.\n");
+      break;
+    }
+
+    // Fix supplementary groups
+    initgroups(user, gid);
+    if (errno == EPERM)
+    {
+      printf("EPERM: The calling process is not privileged.\n");
+    }
+ 
+
+    // Set UID
+    setuid(uid);
+    // Check for errors
+    switch(errno)
+    {
+     case EINVAL:
+      printf("EINVAL: The value of the new euid argument is invalid.\n");
+      break;
+    case EPERM:
+      printf("EPERM: The process may not change to the specified UID.\n");
+      break;
+    }
+
+
+   
+
+
+    /* This is the child process. Run an xterm window */
+    execl(PROGRAM,PROGRAM,"-e",pref_shell,"-l",NULL);
+
+    /* if child returns we must inform parent.
+     * Always exit a child process with _exit() and not return() or exit().
+     */
+    _exit(-1);
+  } else if (pid < 0) { /* Fork failed */
+    printf("Fork faild\n");
+    status = -1;
+  } else {
+    /* This is parent process. Wait for child to complete */
+  if (waitpid(pid, &status, 0) != pid) {
+    status = -1;
+  }
+  }
+
+  return status;
+
+
+}
+
 int main(int argc, char **argv)
 {
 
   // Tell kernel that the function sig_handler should handle signals
-  signal(SIGINT, sig_handler);
-  signal(SIGQUIT, sig_handler);
-  signal(SIGHUP, sig_handler);
+  signal(SIGINT, sig_handler);  // interrupt
+  signal(SIGQUIT, sig_handler); // quit
+  signal(SIGHUP, sig_handler);  // hang up
 
   while (1)
   {
@@ -101,53 +176,57 @@ int main(int argc, char **argv)
       // Check that user account isn't locked
       if (pwentry->pw_failed >= MAX_PW_TRIES)
       {
-        printf("User account is locked, max tries exceeded.\nAsk administrator to reset the file 'pw_failed' in pwfile.\n");
-        return 1;
-      }
-
-      // Retrieve the salt (by copying so that we do not lose information)
-      char salt[3];
-      strlcpy(salt, pwentry->pw_passwd, 3);
-      // printf("salt: %s\n", salt);
-
-      // Hash entered password
-      char *entered_hash[PASSWORD_LEN];
-      *(entered_hash) = crypt(*entered_pw, salt);
-      // printf("entered_hash: %s\n", *entered_hash);
-
-      // Retrieve stored hash
-      char *stored_hash[PASSWORD_LEN];
-      *(stored_hash) = pwentry->pw_passwd;
-      // printf("stored_hash: %s\n", *stored_hash); 
-    
-      // Compare stored hash with entered password hash
-      // printf("comparing '%s' with '%s'\n", *entered_hash, *stored_hash);
-      if (strcmp(*entered_hash, *stored_hash) == 0)
+        printf("User account is locked, max tries exceeded.\nAsk administrator to reset the field 'pw_failed' in pwfile.\n");
+      } 
+      else
       {
-        printf("User authenticated succesfully.\n");
-        // Reset pw_failed counter
-        pwentry->pw_failed = 0;
+        // Retrieve the salt (by copying so that we do not lose information)
+        char salt[3];
+        strncpy(salt, pwentry->pw_passwd, 3);
+        // printf("salt: %s\n", salt);
 
-        // Increment pw_age
-        if (++pwentry->pw_age >= PW_AGE_MAX)
-        {
-          printf("Please change your password, it is becoming old.\n");
-        }
+        // Hash entered password
+        char *entered_hash[PASSWORD_LEN];
+        *(entered_hash) = crypt(*entered_pw, salt);
+        // printf("entered_hash: %s\n", *entered_hash);
 
-        pwdb_update_user(pwentry);
-
-        return 0;
-      }
+        // Retrieve stored hash
+        char *stored_hash[PASSWORD_LEN];
+        *(stored_hash) = pwentry->pw_passwd;
+        // printf("stored_hash: %s\n", *stored_hash); 
       
-      // Increment pw_failed counter
-      pwentry->pw_failed++;
-      pwdb_update_user(pwentry);
+        // Compare stored hash with entered password hash
+        // printf("comparing '%s' with '%s'\n", *entered_hash, *stored_hash);
+        if (strcmp(*entered_hash, *stored_hash) == 0)
+        {
+          printf("User authenticated succesfully.\n");
+          // Reset pw_failed counter
+          pwentry->pw_failed = 0;
 
-    } 
+          // Increment pw_age
+          if (++pwentry->pw_age >= PW_AGE_MAX)
+          {
+            printf("Please change your password, it is becoming old.\n");
+          }
 
-    printf("Unknown user or incorrect password.\n");
-  
-    
+          pwdb_update_user(pwentry);
+
+          open_shell(pwentry->pw_name, pwentry->pw_shell, pwentry->pw_uid, pwentry->pw_gid);
+          //return 0;
+        }
+        else
+        {
+          printf("Unknown user or incorrect password.\n");  
+          // Increment pw_failed counter
+          pwentry->pw_failed++;
+          pwdb_update_user(pwentry);  
+        }
+      }
+    } else
+    {
+      printf("Unknown user or incorrect password.\n");  
+    }
   }
+  return 0;
 }
   
